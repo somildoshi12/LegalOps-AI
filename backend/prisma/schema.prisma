@@ -1,0 +1,130 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Firm {
+  id             String   @id @default(uuid())
+  name           String
+  practiceArea   String
+  workflowType   String
+  preferredTone  String
+  reviewPolicy   String
+  createdAt      DateTime @default(now())
+  cases          Case[]
+}
+
+model Case {
+  id               String            @id @default(uuid())
+  firmId           String
+  firm             Firm              @relation(fields: [firmId], references: [id], onDelete: Cascade)
+  clientName       String
+  matterType       String
+  incidentDate     String?
+  status           String            // e.g. "New Intake", "AI Reviewed", "Missing Info Needed", "Attorney Review", "Draft Generated", "Ready for Filing/Follow-Up", "Closed"
+  priority         String            // e.g. "Low", "Medium", "High"
+  summary          String?           // attorney summary
+  riskScore        Float             @default(0.0)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  documents        Document[]
+  generatedOutputs GeneratedOutput[]
+  tasks            Task[]
+  agentRuns        AgentRun[]
+}
+
+model Document {
+  id              String   @id @default(uuid())
+  caseId          String
+  case            Case     @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  fileName        String
+  fileType        String
+  extractedText   String?
+  extractedJson   String?  // JSON string
+  confidenceScore Float    @default(1.0)
+  createdAt       DateTime @default(now())
+}
+
+model GeneratedOutput {
+  id              String       @id @default(uuid())
+  caseId          String
+  case            Case         @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  outputType      String       // e.g. "Case Summary", "Intake Memo", "Missing Info Checklist", "Demand Letter Draft", "Paralegal Task List"
+  content         String
+  promptVersion   String       @default("1.0.0")
+  modelName       String
+  evaluationScore Float?
+  createdAt       DateTime     @default(now())
+  evaluations     Evaluation[]
+  feedback        Feedback[]
+}
+
+model Task {
+  id          String    @id @default(uuid())
+  caseId      String
+  case        Case      @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  title       String
+  ownerRole   String    // e.g. "Paralegal", "Attorney", "Admin"
+  priority    String    // e.g. "Low", "Medium", "High"
+  dueDate     String?
+  reason      String?   // Why AI generated this task
+  status      String    @default("Pending") // e.g. "Pending", "Completed"
+  createdAt   DateTime  @default(now())
+}
+
+model AgentRun {
+  id             String      @id @default(uuid())
+  caseId         String
+  case           Case        @relation(fields: [caseId], references: [id], onDelete: Cascade)
+  status         String      // e.g. "Success", "Failed", "Running"
+  modelName      String
+  totalLatencyMs Int         @default(0)
+  totalTokens    Int         @default(0)
+  estimatedCost  Float       @default(0.0)
+  errorMessage   String?
+  createdAt      DateTime    @default(now())
+  steps          AgentStep[]
+}
+
+model AgentStep {
+  id           String   @id @default(uuid())
+  agentRunId   String
+  agentRun     AgentRun @relation(fields: [agentRunId], references: [id], onDelete: Cascade)
+  stepName     String   // e.g. "extractCaseFacts", "classifyMatter", etc.
+  status       String   // e.g. "Success", "Failed"
+  inputSummary String?
+  outputSummary String?
+  latencyMs    Int      @default(0)
+  tokensUsed   Int      @default(0)
+  errorMessage String?
+  createdAt    DateTime @default(now())
+}
+
+model Evaluation {
+  id                String          @id @default(uuid())
+  generatedOutputId String
+  generatedOutput   GeneratedOutput @relation(fields: [generatedOutputId], references: [id], onDelete: Cascade)
+  schemaValid       Boolean         @default(true)
+  completenessScore Float           @default(1.0)
+  groundingScore    Float           @default(1.0)
+  hallucinationRisk String          @default("Low") // e.g. "Low", "Medium", "High"
+  safetyScore       Float           @default(1.0)
+  finalScore        Float           @default(1.0)
+  notes             String?
+  createdAt         DateTime        @default(now())
+}
+
+model Feedback {
+  id                String          @id @default(uuid())
+  generatedOutputId String
+  generatedOutput   GeneratedOutput @relation(fields: [generatedOutputId], references: [id], onDelete: Cascade)
+  reviewerRole      String          @default("Attorney")
+  rating            String          // e.g. "Accurate", "Needs minor edits", "Needs major edits", "Unusable"
+  feedbackType      String?         // e.g. "Incorrect facts", "Missing important details", "Tone too formal", etc.
+  comments          String?
+  createdAt         DateTime        @default(now())
+}
